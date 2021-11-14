@@ -1,11 +1,22 @@
-FROM python:3.7
 
-COPY requirements.txt requirements.txt
-RUN pip install --upgrade https://storage.googleapis.com/tensorflow/linux/gpu/tensorflow_gpu-1.1.0-cp35-cp35m-linux_x86_64.whl
-RUN pip install -r requirements.txt
+# Use the official lightweight Python image.
+# https://hub.docker.com/_/python
+FROM python:3.9-slim
 
-EXPOSE 80
+# Allow statements and log messages to immediately appear in the Knative logs
+ENV PYTHONUNBUFFERED True
 
-COPY ./app /app
+# Copy local code to the container image.
+ENV APP_HOME /app
+WORKDIR $APP_HOME
+COPY . ./
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Install production dependencies.
+RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m nltk.downloader all -d /usr/local/nltk_data
+# Run the web service on container startup. Here we use the gunicorn
+# webserver, with one worker process and 8 threads.
+# For environments with multiple CPU cores, increase the number of workers
+# to be equal to the cores available.
+# Timeout is set to 0 to disable the timeouts of the workers to allow Cloud Run to handle instance scaling.
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
